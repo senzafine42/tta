@@ -50,11 +50,13 @@ resource "aws_lb" "app_lb" {
 
   enable_cross_zone_load_balancing = true
 
-  access_logs {
-  bucket  = aws_s3_bucket.lb_logs.id
-  prefix  = "tta-dev-lb"
-  enabled = true
-  }
+##############Disabled during troubleshooting##############
+  # access_logs {
+  # bucket  = aws_s3_bucket.lb_logs.id
+  # prefix  = "tta-dev-lb"
+  # enabled = true
+  # }
+##############Disabled during troubleshooting##############
 
   tags = merge(
     {
@@ -161,75 +163,78 @@ resource "aws_lb_listener" "http" {
 # Listener troubleshooting powershell command
 # terraform state list | Select-String "aws_lb_listener"
 
+##############Disabled during troubleshooting##############
+##############Disabled during troubleshooting##############
+##############Disabled during troubleshooting##############
 
 # S3 bucket for Load Balancer logs
 # ------------------------------------------------------------ 
 
-resource "aws_s3_bucket" "lb_logs" {
-  bucket = "tta-dev-lb-logs"
-  force_destroy = false
+# resource "aws_s3_bucket" "lb_logs" {
+#   bucket = "tta-dev-lb-logs"
+#   force_destroy = false
 
-  tags = merge(
-    {
-        Name = "tta-dev-lb-logs"
-    },
-    local.common_tags
-  )
-}
+#   tags = merge(
+#     {
+#         Name = "tta-dev-lb-logs"
+#     },
+#     local.common_tags
+#   )
+# }
 
-resource "aws_s3_bucket_versioning" "lb_logs_versioning" {
-  bucket = aws_s3_bucket.lb_logs.id
+# resource "aws_s3_bucket_versioning" "lb_logs_versioning" {
+#   bucket = aws_s3_bucket.lb_logs.id
 
-  versioning_configuration {
-    status = "Enabled"
-  }
-}
+#   versioning_configuration {
+#     status = "Enabled"
+#   }
+# }
 
-resource "aws_s3_bucket_server_side_encryption_configuration" "lb_logs_encryption" {
-  bucket = aws_s3_bucket.lb_logs.id
+# resource "aws_s3_bucket_server_side_encryption_configuration" "lb_logs_encryption" {
+#   bucket = aws_s3_bucket.lb_logs.id
 
-  rule {
-    apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
-    }
-  }
-}
+#   rule {
+#     apply_server_side_encryption_by_default {
+#       sse_algorithm = "AES256"
+#     }
+#   }
+# }
 
-resource "aws_s3_bucket_ownership_controls" "lb_logs" {
-  bucket = aws_s3_bucket.lb_logs.id
+# resource "aws_s3_bucket_ownership_controls" "lb_logs" {
+#   bucket = aws_s3_bucket.lb_logs.id
 
-  rule {
-    object_ownership = "BucketOwnerPreferred"
-  }
-}
+#   rule {
+#     object_ownership = "BucketOwnerPreferred"
+#   }
+# }
 
-# Fetch AWS account ID for bucket policy
-data "aws_caller_identity" "current" {}
+# # Fetch AWS account ID for bucket policy
+# data "aws_caller_identity" "current" {}
 
 
-resource "aws_s3_bucket_policy" "lb_logs_policy" {
-  bucket = aws_s3_bucket.lb_logs.id
+# resource "aws_s3_bucket_policy" "lb_logs_policy" {
+#   bucket = aws_s3_bucket.lb_logs.id
 
-  policy = jsonencode({
-    Version = "2012-10-17",
-    Statement = [
-      {
-        Sid       = "AWSLogDeliveryWrite",
-        Effect    = "Allow",
-        Principal = {
-          Service = "elasticloadbalancing.amazonaws.com"
-        },
-        Action = "s3:PutObject",
-        Resource = "${aws_s3_bucket.lb_logs.arn}/*",
-        Condition = {
-          StringEquals = {
-            "aws:SourceAccount" = data.aws_caller_identity.current.account_id
-          }
-        }
-      }
-    ]
-  })
-}
+#   policy = jsonencode({
+#     Version = "2012-10-17",
+#     Statement = [
+#       {
+#         Sid       = "AWSLogDeliveryWrite",
+#         Effect    = "Allow",
+#         Principal = {
+#           Service = "elasticloadbalancing.amazonaws.com"
+#         },
+#         Action = "s3:PutObject",
+#         Resource = "${aws_s3_bucket.lb_logs.arn}/*",
+#         Condition = {
+#           StringEquals = {
+#             "aws:SourceAccount" = data.aws_caller_identity.current.account_id
+#           }
+#         }
+#       }
+#     ]
+#   })
+# }
 
 # EC2 Instances
 # ------------------------------------------------------------
@@ -307,6 +312,14 @@ resource "aws_security_group" "web_access" {
     to_port     = 443
     protocol    = "tcp"
     cidr_blocks = [var.public_a_cidr_block]
+  }
+
+  ingress {
+    description = "SSH from external restricted IP"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["172.58.245.171/32"] # Replace with your IP address
   }
 
   egress {
