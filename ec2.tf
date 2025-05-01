@@ -36,9 +36,6 @@ resource "local_file" "ec2_private_key" {
   file_permission = "0600"
 }
 
-# Security Group for EC2 instances
-# ------------------------------------------------------------
-
 # Load balancer for public access
 # ------------------------------------------------------------
 # AWS Load Balancer
@@ -67,6 +64,7 @@ resource "aws_lb" "app_lb" {
   )
 }
 
+# Least privilege security group for Load Balancer
 resource "aws_security_group" "lb_sg" {
   name        = "tta-dev-lb-sg"
   description = "Security group for ALB in dev environment"
@@ -77,7 +75,10 @@ resource "aws_security_group" "lb_sg" {
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
-    cidr_blocks = ["10.0.0.0/16"]
+    cidr_blocks = [
+      var.public_a_cidr_block,
+      var.public_b_cidr_block
+    ]
   }
 
   ingress {
@@ -85,7 +86,10 @@ resource "aws_security_group" "lb_sg" {
     from_port   = 443
     to_port     = 443
     protocol    = "tcp"
-    cidr_blocks = ["10.0.0.0/16"]
+    cidr_blocks = [
+      var.public_a_cidr_block,
+      var.public_b_cidr_block
+    ]
   }
   ingress {
     description = "Allow SSH from external restricted IP"
@@ -100,7 +104,7 @@ resource "aws_security_group" "lb_sg" {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = ["10.0.0.0/16"]
+    cidr_blocks = [var.vpc_cidr_block]
   }
 
   tags = merge(
@@ -111,9 +115,56 @@ resource "aws_security_group" "lb_sg" {
   )
 }
 
+# Target Group for Load Balancer
+resource "aws_lb_target_group" "app_tg" {
+  name     = "tta-dev-tg"
+  port     = 80
+  protocol = "HTTP"
+  vpc_id   = aws_vpc.dev.id
+
+  health_check {
+    path                = "/"
+    protocol            = "HTTP"
+    interval            = 30
+    timeout             = 5
+    healthy_threshold   = 3
+    unhealthy_threshold = 2
+  }
+
+  tags = merge(
+    {
+      Name = "tta-dev-tg"
+    },
+    local.common_tags
+  )
+}
+
+# Register EC2 instances with the target group
+resource "aws_lb_target_group_attachment" "app_tg_attachment" {
+  target_group_arn = aws_lb_target_group.app_tg.arn
+  target_id        = aws_instance.ec2_public.id
+  port             = 80
+}
+
+# Create a listener for the load balancer
+resource "aws_lb_listener" "http" {
+  load_balancer_arn = aws_lb.app_lb.arn
+  port              = 80
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.app_tg.arn
+  }
+}
+
+# Listener troubleshooting powershell command
+# terraform state list | Select-String "aws_lb_listener"
+
 
 # S3 bucket for Load Balancer logs
 # ------------------------------------------------------------ 
+
 resource "aws_s3_bucket" "lb_logs" {
   bucket = "tta-dev-lb-logs"
   force_destroy = false
@@ -124,12 +175,6 @@ resource "aws_s3_bucket" "lb_logs" {
     },
     local.common_tags
   )
-}
-
-
-resource "aws_s3_bucket_acl" "lb_logs_acl" {
-  bucket = aws_s3_bucket.lb_logs.id
-  acl    = "private"
 }
 
 resource "aws_s3_bucket_versioning" "lb_logs_versioning" {
@@ -148,6 +193,42 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "lb_logs_encryptio
       sse_algorithm = "AES256"
     }
   }
+}
+
+resource "aws_s3_bucket_ownership_controls" "lb_logs" {
+  bucket = aws_s3_bucket.lb_logs.id
+
+  rule {
+    object_ownership = "BucketOwnerPreferred"
+  }
+}
+
+# Fetch AWS account ID for bucket policy
+data "aws_caller_identity" "current" {}
+
+
+resource "aws_s3_bucket_policy" "lb_logs_policy" {
+  bucket = aws_s3_bucket.lb_logs.id
+
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Sid       = "AWSLogDeliveryWrite",
+        Effect    = "Allow",
+        Principal = {
+          Service = "elasticloadbalancing.amazonaws.com"
+        },
+        Action = "s3:PutObject",
+        Resource = "${aws_s3_bucket.lb_logs.arn}/*",
+        Condition = {
+          StringEquals = {
+            "aws:SourceAccount" = data.aws_caller_identity.current.account_id
+          }
+        }
+      }
+    ]
+  })
 }
 
 # EC2 Instances
@@ -179,7 +260,7 @@ resource "aws_instance" "ec2_public" {
   instance_type         = var.ec2_instance_type
   subnet_id             = aws_subnet.public_a.id
   key_name              = aws_key_pair.ec2_key.key_name
-  vpc_security_group_ids = [aws_security_group.lb_sg.id]
+  vpc_security_group_ids = [aws_security_group.web_access.id]
 
   # User data script to install Apache and start the service
   user_data = <<-EOF
@@ -196,11 +277,122 @@ resource "aws_instance" "ec2_public" {
     volume_type = "gp3" # General Purpose SSD
     encrypted = true
     delete_on_termination = true # Delete the volume when the instance is terminated
-    
   }
+
   tags = merge(
     {
       Name = "tta-dev-ec2-public"
+    },
+    local.common_tags
+  )
+}
+
+# Security Group for Public EC2 instances
+resource "aws_security_group" "web_access" {
+  name        = "allow_http_https"
+  description = "Allow HTTP and HTTPS from subnet"
+  vpc_id      = aws_vpc.dev.id
+
+  ingress {
+    description = "HTTP from subnet"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = [var.public_a_cidr_block]
+  }
+
+  ingress {
+    description = "HTTPS from subnet"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = [var.public_a_cidr_block]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = [var.public_a_cidr_block]
+  }
+
+  tags = {
+    Name = "tta-web-sg"
+  }
+}
+
+# Private EC2 instance
+resource "aws_instance" "ec2_private" {
+  ami                   = data.aws_ami.amazon_linux_2023.id # Latest Amazon Linux 2 AMI
+  instance_type         = var.ec2_instance_type
+  subnet_id             = aws_subnet.priv_a.id
+  key_name              = aws_key_pair.ec2_key.key_name
+  vpc_security_group_ids = [aws_security_group.ssh_access.id]
+
+  # EBS Volume for the instance
+  root_block_device {
+    volume_size = 8 # Size in GB
+    volume_type = "gp3" # General Purpose SSD
+    encrypted = true
+    delete_on_termination = true # Delete the volume when the instance is terminated
+  }
+  
+  tags = merge(
+    {
+      Name = "tta-dev-ec2-private"
+    },
+    local.common_tags
+  )
+}
+
+# Elastic IP for NAT Gateway
+resource "aws_eip" "nat" {
+
+  tags = merge(
+    {
+      Name = "tta-dev-nat-eip"
+    },
+    local.common_tags
+  )
+}
+
+# NAT Gateway for Public Subnet
+resource "aws_nat_gateway" "nat" {
+  allocation_id = aws_eip.nat.id
+  subnet_id     = aws_subnet.public_a.id
+
+  tags = merge(
+    {
+      Name = "tta-dev-nat-gateway"
+    },
+    local.common_tags
+  )
+}
+
+# Security Group for Private EC2 instances
+resource "aws_security_group" "ssh_access" {
+  name        = "allow_ssh"
+  description = "Allow SSH from VPC CIDR"
+  vpc_id      = aws_vpc.dev.id  
+
+  ingress {
+    description = "SSH from VPC CIDR"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = [var.vpc_cidr_block]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = [var.vpc_cidr_block]
+  }
+
+  tags = merge(
+    {
+      Name = "ssh-access"
     },
     local.common_tags
   )

@@ -10,12 +10,14 @@
 # VPC and Subnet Variables
 # ------------------------------------------------------------
 
+# Set the AWS region
 variable "aws_region" {
     description = "The AWS region to deploy resources in"
     type        = string
     default     = "us-east-2"
 }
 
+# Set the availability zones for the VPC and subnets
 variable "aws_az_a" {
     description = "The AWS availablity zone"
     type        = string
@@ -28,6 +30,7 @@ variable "aws_az_b" {
     default     = "us-east-2b"
 }
 
+# Set the CIDR block for the VPC and subnets
 variable "vpc_cidr_block" {
     description = "The CIDR block for the VPC"
     type        = string
@@ -68,7 +71,6 @@ variable "ec2_key_name" {
     type        = string
     default     = "my-key-pair"
 }
-
 
 # Tags 
 # ------------------------------------------------------------
