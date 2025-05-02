@@ -45,18 +45,9 @@ resource "aws_lb" "app_lb" {
   load_balancer_type = "application"
   security_groups    = [aws_security_group.lb_sg.id]
   subnets            = [aws_subnet.public_a.id, aws_subnet.public_b.id]
-
   enable_deletion_protection = false
-
   enable_cross_zone_load_balancing = true
 
-##############Disabled during troubleshooting##############
-  # access_logs {
-  # bucket  = aws_s3_bucket.lb_logs.id
-  # prefix  = "tta-dev-lb"
-  # enabled = true
-  # }
-##############Disabled during troubleshooting##############
 
   tags = merge(
     {
@@ -92,13 +83,6 @@ resource "aws_security_group" "lb_sg" {
       var.public_a_cidr_block,
       var.public_b_cidr_block
     ]
-  }
-  ingress {
-    description = "Allow SSH from external restricted IP"
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["172.58.245.171/32"] # Replace with your IP address
   }
 
   egress {
@@ -163,78 +147,82 @@ resource "aws_lb_listener" "http" {
 # Listener troubleshooting powershell command
 # terraform state list | Select-String "aws_lb_listener"
 
-##############Disabled during troubleshooting##############
-##############Disabled during troubleshooting##############
-##############Disabled during troubleshooting##############
-
 # S3 bucket for Load Balancer logs
 # ------------------------------------------------------------ 
 
-# resource "aws_s3_bucket" "lb_logs" {
-#   bucket = "tta-dev-lb-logs"
-#   force_destroy = false
+resource "aws_s3_bucket" "lb_logs" {
+  bucket = "tta-dev-lb-logs"
+  force_destroy = false
 
-#   tags = merge(
-#     {
-#         Name = "tta-dev-lb-logs"
-#     },
-#     local.common_tags
-#   )
-# }
+  tags = merge(
+    {
+        Name = "tta-dev-lb-logs"
+    },
+    local.common_tags
+  )
+}
 
-# resource "aws_s3_bucket_versioning" "lb_logs_versioning" {
-#   bucket = aws_s3_bucket.lb_logs.id
+resource "aws_s3_bucket_versioning" "lb_logs_versioning" {
+  bucket = aws_s3_bucket.lb_logs.id
 
-#   versioning_configuration {
-#     status = "Enabled"
-#   }
-# }
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
 
-# resource "aws_s3_bucket_server_side_encryption_configuration" "lb_logs_encryption" {
-#   bucket = aws_s3_bucket.lb_logs.id
+resource "aws_s3_bucket_server_side_encryption_configuration" "lb_logs_encryption" {
+  bucket = aws_s3_bucket.lb_logs.id
 
-#   rule {
-#     apply_server_side_encryption_by_default {
-#       sse_algorithm = "AES256"
-#     }
-#   }
-# }
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
 
-# resource "aws_s3_bucket_ownership_controls" "lb_logs" {
-#   bucket = aws_s3_bucket.lb_logs.id
+resource "aws_s3_bucket_ownership_controls" "lb_logs" {
+  bucket = aws_s3_bucket.lb_logs.id
 
-#   rule {
-#     object_ownership = "BucketOwnerPreferred"
-#   }
-# }
+  rule {
+    object_ownership = "BucketOwnerPreferred"
+  }
+}
 
-# # Fetch AWS account ID for bucket policy
-# data "aws_caller_identity" "current" {}
+# Fetch AWS account ID for bucket policy and create bucket policy
+resource "aws_s3_bucket_policy" "lb_logs_policy" {
+  bucket = aws_s3_bucket.lb_logs.id
 
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Sid = "AWSLogDeliveryWrite",
+        Effect = "Allow",
+        Principal = {
+          Service = "logdelivery.elb.amazonaws.com"
+        },
+        Action = "s3:PutObject",
+        Resource = "${aws_s3_bucket.lb_logs.arn}/${var.lb_logs_prefix}/${data.aws_caller_identity.current.account_id}/*",
+        Condition = {
+          StringEquals = {
+            "s3:x-amz-acl" = "bucket-owner-full-control"
+          }
+        }
+      },
+      {
+        Sid = "AWSLogDeliveryAclCheck",
+        Effect = "Allow",
+        Principal = {
+          Service = "logdelivery.elb.amazonaws.com"
+        },
+        Action = "s3:GetBucketAcl",
+        Resource = aws_s3_bucket.lb_logs.arn
+      }
+    ]
+  })
+}
 
-# resource "aws_s3_bucket_policy" "lb_logs_policy" {
-#   bucket = aws_s3_bucket.lb_logs.id
-
-#   policy = jsonencode({
-#     Version = "2012-10-17",
-#     Statement = [
-#       {
-#         Sid       = "AWSLogDeliveryWrite",
-#         Effect    = "Allow",
-#         Principal = {
-#           Service = "elasticloadbalancing.amazonaws.com"
-#         },
-#         Action = "s3:PutObject",
-#         Resource = "${aws_s3_bucket.lb_logs.arn}/*",
-#         Condition = {
-#           StringEquals = {
-#             "aws:SourceAccount" = data.aws_caller_identity.current.account_id
-#           }
-#         }
-#       }
-#     ]
-#   })
-# }
+data "aws_caller_identity" "current" {}
 
 # EC2 Instances
 # ------------------------------------------------------------
@@ -319,14 +307,14 @@ resource "aws_security_group" "web_access" {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["172.58.245.171/32"] # Replace with your IP address
+    cidr_blocks = ["0.0.0.0/0"] # Replace with your IP address for security
   }
 
   egress {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = [var.public_a_cidr_block]
+    cidr_blocks = ["0.0.0.0/0"] # Allow all outbound traffic
   }
 
   tags = {
@@ -340,7 +328,7 @@ resource "aws_instance" "ec2_private" {
   instance_type         = var.ec2_instance_type
   subnet_id             = aws_subnet.priv_a.id
   key_name              = aws_key_pair.ec2_key.key_name
-  vpc_security_group_ids = [aws_security_group.ssh_access.id]
+  vpc_security_group_ids = [aws_security_group.priv_access.id]
 
   # EBS Volume for the instance
   root_block_device {
@@ -383,9 +371,9 @@ resource "aws_nat_gateway" "nat" {
 }
 
 # Security Group for Private EC2 instances
-resource "aws_security_group" "ssh_access" {
-  name        = "allow_ssh"
-  description = "Allow SSH from VPC CIDR"
+resource "aws_security_group" "priv_access" {
+  name        = "allow_priv"
+  description = "Allow private from VPC CIDR"
   vpc_id      = aws_vpc.dev.id  
 
   ingress {
@@ -405,8 +393,10 @@ resource "aws_security_group" "ssh_access" {
 
   tags = merge(
     {
-      Name = "ssh-access"
+      Name = "priv-access"
     },
     local.common_tags
   )
 }
+
+

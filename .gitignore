@@ -7,3 +7,7 @@ terraform.tfstate.backup
 .terraform/providers/registry.terraform.io/hashicorp/tls/4.1.0/windows_amd64/terraform-provider-tls_v4.1.0_x5.exe
 tta-dev-key.pem
 .terraform.lock.hcl
+terraform.tfvars
+.terraform.tfstate.lock.info
+terraform.tfstate
+

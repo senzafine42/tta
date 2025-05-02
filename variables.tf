@@ -72,6 +72,13 @@ variable "ec2_key_name" {
     default     = "my-key-pair"
 }
 
+# S3 Bucket Variables
+# ------------------------------------------------------------
+variable "lb_logs_prefix" {
+  default = "alb-access-logs"
+}
+
+
 # Tags 
 # ------------------------------------------------------------
 
