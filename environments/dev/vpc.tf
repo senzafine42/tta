@@ -22,10 +22,6 @@
 # Variables variables.tf (input variables, tags)
 ###############################################################
 
-provider "aws" {
-  region = var.aws_region
-}
-  
 # VPC
 resource "aws_vpc" "dev" {
   cidr_block           = var.vpc_cidr_block
