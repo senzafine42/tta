@@ -1,35 +1,50 @@
 # Terraform Technical Assignment
 
-Scenario
+## Scenario
 
-Description
-A company is looking to create a proof-of-concept environment in a public cloud service
-provider. They want a simple VPC and VMs as outlined below. The company would also like to
-use Terraform to manage their infrastructure via code, and would like this to be deployable as a
-module.
-Diagram
+### Description
+A company is looking to create a proof-of-concept (PoC) environment in a public cloud service provider.  
+They want a simple **VPC** and **virtual machines (VMs)** as outlined below.
 
-Deliverables
-● Terraform configuration files for your module.
-● Terraform configuration files to deploy your module in a development environment.
+The company would also like to:
+- Use **Terraform** to manage infrastructure as code
+- Deploy the solution as a **reusable Terraform module**
 
-● A terraform.tfvars file for the module’s variables within the environment.
-● A tfplan.txt file containing the output of terraform plan without errors.
-● A public GitHub repository, or a git bundle file, containing your solution.
-What we’re looking for
-● We’re interested in readable Terraform configuration files that are well documented and
-easy to follow.
-● We’re interested in seeing your thought process as you make commits to a repository.
-● We’re interested in seeing your solution to aspects of this assignment that are not
-explicitly provided to you. Feel free to use your preferred practices and/or tools.
-Notes
-You may write this module using whatever public cloud service provider you are most
-comfortable with. See links below to sign up for the free tier of Google Cloud, AWS, and Azure.
-● Google Cloud
-● AWS
-● Azure
-You are not required to incur any charges as part of completing this assignment.
-You are not required to deploy the solution, you are only required to include your terraform
-plan output.
-If you deploy any resources as part of completing this assignment, be sure to run
-terraform destroy to prevent any accidental charges.
+### Diagram
+> _Diagram to be provided or referenced here_
+
+---
+
+## Deliverables
+
+- Terraform configuration files for the **module**
+- Terraform configuration files to deploy the module in a **development environment**
+- A `terraform.tfvars` file defining the module’s variables for the environment
+- A `tfplan.txt` file containing the output of `terraform plan` with **no errors**
+- A **public GitHub repository** or a **git bundle file** containing the solution
+
+---
+
+## What We’re Looking For
+
+- Readable, well-documented Terraform configuration files
+- Clear commit history showing your **thought process**
+- Your approach to aspects of the assignment that are **not explicitly defined**
+
+You are encouraged to use your preferred best practices and tooling.
+
+---
+
+## Notes
+
+- You may write this module using **any public cloud provider** you are most comfortable with:
+  - Google Cloud
+  - AWS
+  - Azure
+- Free-tier usage is sufficient; **you are not required to incur any charges**
+- You are **not required to deploy** the solution  
+  - Only the `terraform plan` output is required
+- If you do deploy resources:
+  - Be sure to run `terraform destroy` to avoid accidental charges
+
+---
